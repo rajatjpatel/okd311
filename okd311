@@ -1,0 +1,198 @@
+Steps to install OKD 3.11 on CentOS 7.X
+
+-----------+-----------------------------+-----------------------------+----------------------------+----------
+           |192.168.0.200                |192.168.0.201                |192.168.0.202               |192.168.0.203
++----------+-----------+      +----------+-----------+      +----------+-----------+     +----------+-----------+
+|      [ master]       |      |     [ node1 ]        |      |     [ node2 ]        |     |      [ infra ]       |
+|     (Master Node)    |      |    (Compute Node)    |      |    (Compute Node)    |     |     (Infra Node)     |
+|     (Infra Node)     |      |                      |      |                      |     |    (Storage Node)    |
+|     (Compute Node)   |      |                      |      |                      |     |                      |
++----------------------+      +----------------------+      +----------------------+     +----------------------+
+
+
+
+
+There are some System requirements to configure cluster.
+* Master node has up to 16G memory and up to 4 vCPU.
+* Compute node has up to 8G memory and up to 1 vCPU.
+* On all nodes, base OS is RHEL(CentOS) 7.X or later (this example is based on CentOS 7.X).
+
+Set the hostname and IP Address(In case no DNS server in infra, use nip.io as below)
+hostnamectl set-hostname master.192.168.0.200.nip.io
+hostnamectl set-hostname node1.192.168.0.201.nip.io
+hostnamectl set-hostname node2.192.168.0.202.nip.io
+hostnamectl set-hostname infra.192.168.0.203.nip.io
+
+Change the /etc/hosts in all the nodes
+192.168.0.200     master.192.168.0.200.nip.io   master
+192.168.0.201     node1.192.168.0.201.nip.io    node1
+192.168.0.202     node2.192.168.0.202.nip.io    node2
+192.168.0.203     infra.192.168.0.203.nip.io    infra
+
+Edit ssh setting
+vi /etc/ssh/sshd_config
+
+PubkeyAuthentication yes
+PasswordAuthentication yes
+
+Copy the public key in all the nodes visa-versa
+ssh-keygen -q -N ""
+ssh-copy-id master.192.168.0.200.nip.io
+ssh-copy-id node1.192.168.0.201.nip.io
+ssh-copy-id node2.192.168.0.202.nip.io
+ssh-copy-id infra.192.168.0.203.nip.io
+
+Install NetworkManager and Packages on all nodes
+yum -y install NetworkManager && systemctl start NetworkManager && systemctl enable NetworkManager && yum install -y NetworkManager wget git net-tools bind-utils yum-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct && yum update -y
+
+Installation for Docker
+yum install -y wget git  nano net-tools docker-1.13.1 bind-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct openssl-devel httpd-tools NetworkManager python-cryptography python-devel python-passlib java-1.8.0-openjdk-headless "@Development Tools" && systemctl start docker && systemctl enable docker && systemctl status docker
+
+Add Ansible repo to Master
+
+cat <<EOF>> /etc/yum.repos.d/ansible.repo
+[ansible]
+name = Ansible Repo
+baseurl = https://releases.ansible.com/ansible/rpm/release/epel-7-x86_64/
+enabled = 1
+gpgcheck =  0
+EOF
+
+Install Ansible Package and Clone Openshift-Ansible Git Repo on Master Machine
+yum -y install ansible-2.6* pyOpenSSL
+git clone https://github.com/openshift/openshift-ansible.git
+cd openshift-ansible && git fetch && git checkout release-3.11
+
+Now Create Your Own Inventory file for Ansible as following on master Node: https://docs.okd.io/latest/install/example_inventories.html#install-config-example-inventories
+vi ~/inventory.ini
+[OSEv3:children]
+masters
+nodes
+etcd
+
+[masters]
+master.openshift.com
+
+[etcd]
+master.openshift.com
+
+[nodes]
+master.192.168.0.200.nip.io openshift_ip=192.168.0.200 openshift_node_group_name='node-config-master'
+node1.192.168.0.201.nip.io openshift_ip=192.168.0.201 openshift_node_group_name='node-config-compute'
+node2.192.168.0.202 openshift_ip=192.168.0.202 openshift_node_group_name='node-config-compute'
+infra.192.168.0.203.nip.io openshift_ip=192.168.0.203 openshift_node_group_name='node-config-infra'
+
+[OSEv3:vars]
+debug_level=4
+ansible_ssh_user=root
+ansible_become=true
+openshift_enable_service_catalog=true
+ansible_service_broker_install=true
+
+# use HTPasswd for authentication
+openshift_master_identity_providers=[{'name': 'htpasswd_auth', 'login': 'true', 'challenge': 'true', 'kind': 'HTPasswdPasswordIdentityProvider'}]
+
+openshift_node_groups=[{'name': 'node-config-master', 'labels': ['node-role.kubernetes.io/master=true']}, {'name': 'node-config-infra', 'labels': ['node-role.kubernetes.io/infra=true']}, {'name': 'node-config-compute', 'labels': ['node-role.kubernetes.io/compute=true']}]
+
+containerized=false
+os_sdn_network_plugin_name='redhat/openshift-ovs-multitenant'
+openshift_disable_check=disk_availability,docker_storage,memory_availability,docker_image_availability
+
+deployment_type=origin
+openshift_deployment_type=origin
+
+openshift_release=v3.11.0
+openshift_pkg_version=-3.11.0
+openshift_image_tag=v3.11.0
+openshift_service_catalog_image_version=v3.11.0
+template_service_broker_image_version=v3.11
+osm_use_cockpit=true
+
+# put the router on dedicated infra1 node
+openshift_master_cluster_method=native
+openshift_master_default_subdomain=apps.master.192.168.0.200.nip.io
+openshift_public_hostname=master.192.168.0.200.nip.io
+
+Use the below ansible playbook command to check the prerequisites to deply OpenShift Cluster on master Node:
+ansible-playbook -i ~/inventory.ini playbooks/prerequisites.yml
+
+Once prerequisites completed without any error use the below ansible playbook to Deploy OpenShift Cluster on master Node:
+ansible-playbook -i ~/inventory.ini playbooks/deploy_cluster.yml
+
+oc login as admin
+oc login -u system:admin
+
+Change admin password and role
+
+oc login -u system:admin -n default
+htpasswd -c /etc/origin/master/htpasswd admin
+oc adm policy add-cluster-role-to-user cluster-admin admin
+
+
+Use below command to list the projects, pods, nodes, Replication Controllers, Services and Deployment Config.
+
+oc whoami
+
+oc get projects
+
+oc get nodes –show-labels=true
+
+oc get nodes
+
+oc get pod --all-namespaces
+
+oc get rc
+
+oc get svc
+
+oc get dc
+
+oc whoami --show-console
+
+On Master Node, add a new user with HTPasswd.
+
+htpasswd -c /etc/origin/master/htpasswd okd311
+
+oc login -u okd311
+
+oc whoami
+
+oc logout
+
+It's possible to access to admin console from any Clients with Web browser.
+
+https://master.192.168.0.200.nip.io:8443/console/
+
+Deploy Applications, This is the tutorial for common developper users who use Openshift System.
+
+oc login -u okd311
+
+oc new-project okd311-project
+
+oc new-app centos/ruby-25-centos7~https://github.com/sclorg/ruby-ex.git
+
+Tag an application image from Docker Hub
+
+oc tag --source=docker openshift/deployment-example:v2 deployment-example:latest
+
+Deploy [deployment-example] application
+
+oc new-app deployment-example
+
+show status
+
+oc status
+
+Describe application
+
+oc describe svc/deployment-example
+
+Show Pods status
+
+oc get pods
+
+Delete application, run like follows
+
+oc delete all -l app=deployment-example
+
+oc get pods
