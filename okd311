@@ -88,6 +88,8 @@ ansible_ssh_user=root
 ansible_become=true
 openshift_enable_service_catalog=true
 ansible_service_broker_install=true
+openshift_web_console_install=true
+openshift_console_install=true
 
 # use HTPasswd for authentication
 openshift_master_identity_providers=[{'name': 'htpasswd_auth', 'login': 'true', 'challenge': 'true', 'kind': 'HTPasswdPasswordIdentityProvider'}]
