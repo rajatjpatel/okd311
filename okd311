@@ -77,10 +77,10 @@ master.192.168.0.200.nip.io
 master.192.168.0.200.nip.io
 
 [nodes]
-master.192.168.0.200.nip.io openshift_ip=192.168.0.200 openshift_node_group_name='node-config-master'
-node1.192.168.0.201.nip.io openshift_ip=192.168.0.201 openshift_node_group_name='node-config-compute'
-node2.192.168.0.202 openshift_ip=192.168.0.202 openshift_node_group_name='node-config-compute'
-infra.192.168.0.203.nip.io openshift_ip=192.168.0.203 openshift_node_group_name='node-config-infra'
+master.192.168.0.200.nip.io  openshift_node_group_name='node-config-master'
+node1.192.168.0.201.nip.io  openshift_node_group_name='node-config-compute'
+node2.192.168.0.202.nip.io  openshift_node_group_name='node-config-compute'
+infra.192.168.0.203.nip.io  openshift_node_group_name='node-config-infra'
 
 [OSEv3:vars]
 debug_level=4
