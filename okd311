@@ -71,10 +71,10 @@ nodes
 etcd
 
 [masters]
-master.openshift.com
+master.192.168.0.200.nip.io
 
 [etcd]
-master.openshift.com
+master.192.168.0.200.nip.io
 
 [nodes]
 master.192.168.0.200.nip.io openshift_ip=192.168.0.200 openshift_node_group_name='node-config-master'
